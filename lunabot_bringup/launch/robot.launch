@@ -2,49 +2,18 @@
 <launch>
     <arg name="autonomy" default="false" />
     <arg name="record" default="true" />
-    <arg name="teensy" default="true" />
     <arg name="cameras" default="true" />
     <arg name="overhead" default="true" />
     <arg name="slam" default="true" />
     <arg name="exp_name" default="exp" />
 
-    <node if="$(arg teensy)" name="teensy_driver" pkg="lunabot_embedded" type="teensy_driver_node" output="screen"/>
-
+    <include file="$(find lunabot_bringup)/launch/teensy.launch"/>
     <include if="$(arg cameras)" file="$(find lunabot_perception)/launch/cameras.launch"/>
     <include if="$(arg overhead)" file="$(find lunabot_bringup)/launch/overhead.launch"/>
     <include if="$(arg record)" file="$(find lunabot_bringup)/launch/record.launch">
         <arg name="exp_name" value="$(arg exp_name)"/>
     </include>
-
-    <group if="$(arg autonomy)">
-
-      <include if="$(arg slam)" file="$(find rtabmap_ros)/launch/rtabmap.launch" >
-        <arg name="rtabmap_args" value="--delete_db_on_start"/>
-        <arg name="depth_topic" value="/d455_back/camera/aligned_depth_to_color/image_raw"/>
-        <arg name="rgb_topic" value="/d455_back/camera/color/image_rect_color"/>
-        <arg name="camera_info_topic" value="/d455_back/camera/color/camera_info"/>
-        <arg name="rtabmapviz" value="false" />
-        <arg name="imu_topic" value="/imu" />
-        <arg name="frame_id" value="base_link" />
-      </include>
-
-      <node pkg="lunabot_control" type="effort_factory.py" name="effort_factory" output="screen"/>
-
-      <node pkg="lunabot_control" type="differential_drive_controller.py" name="differential_drive_controller" output="screen"/>
-
-      <group ns="nav">
-          <node pkg="lunabot_control" type="mpc_node" name="mpc_node" output="screen"/>
-
-          <node name="global_planner_node" pkg="lunabot_nav" type="dstar_node.py" output="screen" respawn="true">
-              <!-- <rosparam file="$(find lunabot_config)/config/rrtstar.yml" command="load"/> -->
-          </node>
-      </group>
-
-      <group ns="maps">
-          <node name="costmap_node" pkg="lunabot_perception" type="costmap_node" output="screen">
-              <rosparam file="$(find lunabot_config)/config/global_costmap.yml" command="load" ns="global_costmap" />
-          </node>
-      </group>
-
-    </group>
+    <include if="$(arg autonomy)" file="$(find lunabot_bringup)/launch/autonomy.launch">
+        <arg name="slam" value="$(arg slam)"/>
+    </include>
 </launch>

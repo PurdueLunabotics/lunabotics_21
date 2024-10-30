@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<launch>
+    <arg name="slam" default="true"/>
+    <include if="$(arg slam)" file="$(find lunabot_bringup)/launch/slam.launch"/>
+
+    <node pkg="lunabot_control" type="effort_factory.py" name="effort_factory" output="screen"/>
+
+    <node pkg="lunabot_control" type="differential_drive_controller.py" name="differential_drive_controller" output="screen"/>
+
+    <group ns="nav">
+        <node pkg="lunabot_control" type="mpc_node" name="mpc_node" output="screen"/>
+
+        <node name="global_planner_node" pkg="lunabot_nav" type="dstar_node.py" output="screen" respawn="true">
+            <!-- <rosparam file="$(find lunabot_config)/config/rrtstar.yml" command="load"/> -->
+        </node>
+    </group>
+
+    <group ns="maps">
+        <node name="costmap_node" pkg="lunabot_perception" type="costmap_node" output="screen">
+            <rosparam file="$(find lunabot_config)/config/global_costmap.yml" command="load" ns="global_costmap" />
+        </node>
+    </group>
+</launch>

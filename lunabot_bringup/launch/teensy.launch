@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<launch>
+    <node name="teensy_driver" pkg="lunabot_embedded" type="teensy_driver_node" output="screen"/>
+</launch>
