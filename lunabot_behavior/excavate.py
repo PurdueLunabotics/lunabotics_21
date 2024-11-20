@@ -78,7 +78,7 @@ class Excavate:
         self.LOWERING_TIME = 30  # seconds
         self.TRENCHING_TIME = 5  # seconds
 
-        self.load_cell_weight_threshold = 0  # TODO find value
+        self.load_cell_weight_threshold = 40  # TODO find value
         self.max_lin_act_vel = (
             0.00688405797
         )  # In meters/s, the speed of the linear actuators at the max power
@@ -197,18 +197,20 @@ class Excavate:
         current_time = rospy.get_time()
         start_time = current_time
 
-        """
-        TODO: no load cells yet
+        # load_cell_weight = self.robot_sensors.load_cell_weights[0] + self.robot_sensors.load_cell_weights[1]
 
+
+        """
         load_cell_weight = self.robot_sensors.load_cell_weights[0] + self.robot_sensors.load_cell_weights[1]
 
         original while condition: load_cell_weight < self.load_cell_weight_threshold
+        rospy.get_time() - start_time < self.TRENCHING_TIME:
         """
 
         # TODO add logic for stopping if obstacles exist (both rocks and craters)
 
         # Until the set amount of time, keep moving the robot forward and spinning excavation
-        while rospy.get_time() - start_time < self.TRENCHING_TIME:
+        while self.robot_sensors.load_cell_weight < self.load_cell_weight_threshold:
 
             if interrupts.check_for_interrupts() != interrupts.Errors.FINE:
                 return False
@@ -249,11 +251,8 @@ class Excavate:
             current_time = new_time
             excavation_ang = new_excavation_ang
 
-            #load_cell_weight = (
-            #    self.robot_sensors.load_cell_weights[0]
-            #    + self.robot_sensors.load_cell_weights[1]
-            #)
-
+            # load_cell_weight = self.robot_sensors.load_cell_weights[0] + self.robot_sensors.load_cell_weights[1]
+            
             self.rate.sleep()
 
         excavation_message.data = 0
