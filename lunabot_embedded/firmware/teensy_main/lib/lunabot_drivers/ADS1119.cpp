@@ -177,7 +177,7 @@ uint8_t ADS1119::readRegister(ADS1119RegisterToRead registerToRead)
 {
     // 8.5.3.6 RREG (0010 0rxx) / Page 26
     // http://www.ti.com/lit/ds/sbas925a/sbas925a.pdf
-    uint8_t byteToWrite = 0B00100000 || (uint8_t(registerToRead) << 2);
+    uint8_t byteToWrite = 0B00100000 | (uint8_t(registerToRead) << 2);
     _i2c->beginTransmission(_address);
     _i2c->write(byteToWrite);
     if (_i2c->endTransmission() != 0)

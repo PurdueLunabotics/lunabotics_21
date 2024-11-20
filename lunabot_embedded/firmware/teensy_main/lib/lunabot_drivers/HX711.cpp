@@ -1,258 +1,372 @@
-/**
- *
- * HX711 library for Arduino
- * https://github.com/bogde/HX711
- *
- * MIT License
- * (c) 2018 Bogdan Necula
- *
- **/
+//
+//    FILE: HX711.cpp
+//  AUTHOR: Rob Tillaart
+// VERSION: 0.5.0
+// PURPOSE: Library for load cells for UNO
+//     URL: https://github.com/RobTillaart/HX711_MP
+//     URL: https://github.com/RobTillaart/HX711
+
 #include "HX711.h"
-#include <Arduino.h>
 
-// TEENSYDUINO has a port of Dean Camera's ATOMIC_BLOCK macros for AVR to ARM
-// Cortex M3.
-#define HAS_ATOMIC_BLOCK (defined(ARDUINO_ARCH_AVR) || defined(TEENSYDUINO))
-
-// Whether we are running on either the ESP8266 or the ESP32.
-#define ARCH_ESPRESSIF (defined(ARDUINO_ARCH_ESP8266) || defined(ARDUINO_ARCH_ESP32))
-
-// Whether we are actually running on FreeRTOS.
-#define IS_FREE_RTOS defined(ARDUINO_ARCH_ESP32)
-
-// Define macro designating whether we're running on a reasonable
-// fast CPU and so should slow down sampling from GPIO.
-#define FAST_CPU                                                                                   \
-  (ARCH_ESPRESSIF || defined(ARDUINO_ARCH_SAM) || defined(ARDUINO_ARCH_SAMD) ||                    \
-   defined(ARDUINO_ARCH_STM32) || defined(TEENSYDUINO))
-
-#if HAS_ATOMIC_BLOCK
-// Acquire AVR-specific ATOMIC_BLOCK(ATOMIC_RESTORESTATE) macro.
-#include <util/atomic.h>
-#endif
-
-#if FAST_CPU
-// Make shiftIn() be aware of clockspeed for
-// faster CPUs like ESP32, Teensy 3.x and friends.
-// See also:
-// - https://github.com/bogde/HX711/issues/75
-// - https://github.com/arduino/Arduino/issues/6561
-// -
-// https://community.hiveeyes.org/t/using-bogdans-canonical-hx711-library-on-the-esp32/539
-uint8_t shiftInSlow(uint8_t dataPin, uint8_t clockPin, uint8_t bitOrder) {
-  uint8_t value = 0;
-  uint8_t i;
-
-  for (i = 0; i < 8; ++i) {
-    digitalWrite(clockPin, HIGH);
-    delayMicroseconds(1);
-    if (bitOrder == LSBFIRST)
-      value |= digitalRead(dataPin) << i;
-    else
-      value |= digitalRead(dataPin) << (7 - i);
-    digitalWrite(clockPin, LOW);
-    delayMicroseconds(1);
-  }
-  return value;
+HX711::HX711() {
+  _gain = HX711_CHANNEL_A_GAIN_128;
+  _offset = 0;
+  _scale = 1;
+  _lastRead = 0;
+  _price = 0;
+  _mode = HX711_AVERAGE_MODE;
+  _fastProcessor = false;
 }
-#define SHIFTIN_WITH_SPEED_SUPPORT(data, clock, order) shiftInSlow(data, clock, order)
-#else
-#define SHIFTIN_WITH_SPEED_SUPPORT(data, clock, order) shiftIn(data, clock, order)
-#endif
-
-#if ARCH_ESPRESSIF
-// ESP8266 doesn't read values between 0x20000 and 0x30000 when DOUT is pulled
-// up.
-#define DOUT_MODE INPUT
-#else
-#define DOUT_MODE INPUT_PULLUP
-#endif
-
-HX711::HX711() {}
 
 HX711::~HX711() {}
 
-void HX711::begin(byte dout, byte pd_sck, byte gain) {
-  PD_SCK = pd_sck;
-  DOUT = dout;
+void HX711::begin(uint8_t dataPin, uint8_t clockPin, bool fastProcessor) {
+  _dataPin = dataPin;
+  _clockPin = clockPin;
+  _fastProcessor = fastProcessor;
 
-  pinMode(PD_SCK, OUTPUT);
-  pinMode(DOUT, DOUT_MODE);
+  pinMode(_dataPin, INPUT);
+  pinMode(_clockPin, OUTPUT);
+  digitalWrite(_clockPin, LOW);
 
-  set_gain(gain);
+  reset();
 }
 
-bool HX711::is_ready() { return digitalRead(DOUT) == LOW; }
+void HX711::reset() {
+  power_down();
+  power_up();
+  _gain = HX711_CHANNEL_A_GAIN_128;
+  _offset = 0;
+  _scale = 1;
+  _lastRead = 0;
+  _price = 0;
+  _mode = HX711_AVERAGE_MODE;
+}
 
-void HX711::set_gain(byte gain) {
-  switch (gain) {
-  case 128: // channel A, gain factor 128
-    GAIN = 1;
-    break;
-  case 64: // channel A, gain factor 64
-    GAIN = 3;
-    break;
-  case 32: // channel B, gain factor 32
-    GAIN = 2;
-    break;
+bool HX711::is_ready() { return digitalRead(_dataPin) == LOW; }
+
+void HX711::wait_ready(uint32_t ms) {
+  while (!is_ready()) {
+    delay(ms);
   }
 }
 
-long HX711::read() {
+bool HX711::wait_ready_retry(uint8_t retries, uint32_t ms) {
+  while (retries--) {
+    if (is_ready())
+      return true;
+    delay(ms);
+  }
+  return false;
+}
 
-  // Wait for the chip to become ready.
-  wait_ready();
+bool HX711::wait_ready_timeout(uint32_t timeout, uint32_t ms) {
+  uint32_t start = millis();
+  while (millis() - start < timeout) {
+    if (is_ready())
+      return true;
+    delay(ms);
+  }
+  return false;
+}
 
-  // Define structures for reading data into.
-  unsigned long value = 0;
-  uint8_t data[3] = {0};
-  uint8_t filler = 0x00;
-
-// Protect the read sequence from system interrupts.  If an interrupt occurs
-// during the time the PD_SCK signal is high it will stretch the length of the
-// clock pulse. If the total pulse time exceeds 60 uSec this will cause the
-// HX711 to enter power down mode during the middle of the read sequence.  While
-// the device will wake up when PD_SCK goes low again, the reset starts a new
-// conversion cycle which forces DOUT high until that cycle is completed.
+///////////////////////////////////////////////////////////////
 //
-// The result is that all subsequent bits read by shiftIn() will read back as 1,
-// corrupting the value returned by read().  The ATOMIC_BLOCK macro disables
-// interrupts during the sequence and then restores the interrupt mask to its
-// previous state after the sequence completes, insuring that the entire
-// read-and-gain-set sequence is not interrupted.  The macro has a few minor
-// advantages over bracketing the sequence between `noInterrupts()` and
-// `interrupts()` calls.
-#if HAS_ATOMIC_BLOCK
-  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+//  READ
+//
+//  From datasheet page 4
+//  When output data is not ready for retrieval,
+//       digital output pin DOUT is HIGH.
+//  Serial clock input PD_SCK should be LOW.
+//  When DOUT goes to LOW, it indicates data is ready for retrieval.
+float HX711::read() {
+  //  this BLOCKING wait takes most time...
+  while (digitalRead(_dataPin) == HIGH)
+    yield();
 
-#elif IS_FREE_RTOS
-  // Begin of critical section.
-  // Critical sections are used as a valid protection method
-  // against simultaneous access in vanilla FreeRTOS.
-  // Disable the scheduler and call portDISABLE_INTERRUPTS. This prevents
-  // context switches and servicing of ISRs during a critical section.
-  portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
-  portENTER_CRITICAL(&mux);
+  union {
+    long value = 0;
+    uint8_t data[4];
+  } v;
 
-#else
-  // Disable interrupts.
+  //  blocking part ...
   noInterrupts();
-#endif
 
-    // Pulse the clock pin 24 times to read the data.
-    data[2] = SHIFTIN_WITH_SPEED_SUPPORT(DOUT, PD_SCK, MSBFIRST);
-    data[1] = SHIFTIN_WITH_SPEED_SUPPORT(DOUT, PD_SCK, MSBFIRST);
-    data[0] = SHIFTIN_WITH_SPEED_SUPPORT(DOUT, PD_SCK, MSBFIRST);
+  //  Pulse the clock pin 24 times to read the data.
+  //  v.data[2] = shiftIn(_dataPin, _clockPin, MSBFIRST);
+  //  v.data[1] = shiftIn(_dataPin, _clockPin, MSBFIRST);
+  //  v.data[0] = shiftIn(_dataPin, _clockPin, MSBFIRST);
+  v.data[2] = _shiftIn();
+  v.data[1] = _shiftIn();
+  v.data[0] = _shiftIn();
 
-    // Set the channel and the gain factor for the next reading using the
-    // clock pin.
-    for (unsigned int i = 0; i < GAIN; i++) {
-      digitalWrite(PD_SCK, HIGH);
-#if ARCH_ESPRESSIF
+  //  TABLE 3 page 4 datasheet
+  //
+  //  CLOCK      CHANNEL      GAIN      m
+  //  ------------------------------------
+  //   25           A         128       1    //  default
+  //   26           B          32       2
+  //   27           A          64       3
+  //
+  //  only default 128 verified,
+  //  selection goes through the set_gain(gain)
+  //
+  uint8_t m = 1;
+  if (_gain == HX711_CHANNEL_A_GAIN_128)
+    m = 1;
+  else if (_gain == HX711_CHANNEL_A_GAIN_64)
+    m = 3;
+  else if (_gain == HX711_CHANNEL_B_GAIN_32)
+    m = 2;
+
+  while (m > 0) {
+    //  delayMicroSeconds(1) needed for fast processors?
+    digitalWrite(_clockPin, HIGH);
+    if (_fastProcessor)
       delayMicroseconds(1);
-#endif
-      digitalWrite(PD_SCK, LOW);
-#if ARCH_ESPRESSIF
+    digitalWrite(_clockPin, LOW);
+    if (_fastProcessor)
       delayMicroseconds(1);
-#endif
-    }
+    m--;
+  }
 
-#if IS_FREE_RTOS
-    // End of critical section.
-    portEXIT_CRITICAL(&mux);
+  interrupts();
+  //  yield();
 
-#elif HAS_ATOMIC_BLOCK
+  //  SIGN extend
+  if (v.data[2] & 0x80)
+    v.data[3] = 0xFF;
+
+  _lastRead = millis();
+  return 1.0 * v.value;
 }
 
-#else
-  // Enable interrupts again.
-  interrupts();
-#endif
-
-    // Replicate the most significant bit to pad out a 32-bit signed integer
-    if (data[2] & 0x80) {
-      filler = 0xFF;
-    } else {
-      filler = 0x00;
-    }
-
-    // Construct a 32-bit signed integer
-    value = (static_cast<unsigned long>(filler) << 24 | static_cast<unsigned long>(data[2]) << 16 |
-             static_cast<unsigned long>(data[1]) << 8 | static_cast<unsigned long>(data[0]));
-
-    return static_cast<long>(value);
+float HX711::read_average(uint8_t times) {
+  if (times < 1)
+    times = 1;
+  float sum = 0;
+  for (uint8_t i = 0; i < times; i++) {
+    sum += read();
+    yield();
   }
+  return sum / times;
+}
 
-  void HX711::wait_ready(unsigned long delay_ms) {
-    // Wait for the chip to become ready.
-    // This is a blocking implementation and will
-    // halt the sketch until a load cell is connected.
-    while (!is_ready()) {
-      // Probably will do no harm on AVR but will feed the Watchdog Timer
-      // (WDT) on ESP. https://github.com/bogde/HX711/issues/73
-      delay(delay_ms);
-    }
+float HX711::read_median(uint8_t times) {
+  if (times > 15)
+    times = 15;
+  if (times < 3)
+    times = 3;
+  float samples[15];
+  for (uint8_t i = 0; i < times; i++) {
+    samples[i] = read();
+    yield();
   }
+  _insertSort(samples, times);
+  if (times & 0x01)
+    return samples[times / 2];
+  return (samples[times / 2] + samples[times / 2 + 1]) / 2;
+}
 
-  bool HX711::wait_ready_retry(int retries, unsigned long delay_ms) {
-    // Wait for the chip to become ready by
-    // retrying for a specified amount of attempts.
-    // https://github.com/bogde/HX711/issues/76
-    int count = 0;
-    while (count < retries) {
-      if (is_ready()) {
-        return true;
-      }
-      delay(delay_ms);
-      count++;
-    }
+float HX711::read_medavg(uint8_t times) {
+  if (times > 15)
+    times = 15;
+  if (times < 3)
+    times = 3;
+  float samples[15];
+  for (uint8_t i = 0; i < times; i++) {
+    samples[i] = read();
+    yield();
+  }
+  _insertSort(samples, times);
+  float sum = 0;
+  //  iterate over 1/4 to 3/4 of the array
+  uint8_t count = 0;
+  uint8_t first = (times + 2) / 4;
+  uint8_t last = times - first - 1;
+  for (uint8_t i = first; i <= last; i++) //  !! include last one too
+  {
+    sum += samples[i];
+    count++;
+  }
+  return sum / count;
+}
+
+float HX711::read_runavg(uint8_t times, float alpha) {
+  if (times < 1)
+    times = 1;
+  if (alpha < 0)
+    alpha = 0;
+  if (alpha > 1)
+    alpha = 1;
+  float val = read();
+  for (uint8_t i = 1; i < times; i++) {
+    val += alpha * (read() - val);
+    yield();
+  }
+  return val;
+}
+
+///////////////////////////////////////////////////////
+//
+//  MODE
+//
+void HX711::set_raw_mode() { _mode = HX711_RAW_MODE; }
+
+void HX711::set_average_mode() { _mode = HX711_AVERAGE_MODE; }
+
+void HX711::set_median_mode() { _mode = HX711_MEDIAN_MODE; }
+
+void HX711::set_medavg_mode() { _mode = HX711_MEDAVG_MODE; }
+
+//  set_run_avg will use a default alpha of 0.5.
+void HX711::set_runavg_mode() { _mode = HX711_RUNAVG_MODE; }
+
+uint8_t HX711::get_mode() { return _mode; }
+
+float HX711::get_value(uint8_t times) {
+  float raw;
+  switch (_mode) {
+  case HX711_RAW_MODE:
+    raw = read();
+    break;
+  case HX711_RUNAVG_MODE:
+    raw = read_runavg(times);
+    break;
+  case HX711_MEDAVG_MODE:
+    raw = read_medavg(times);
+    break;
+  case HX711_MEDIAN_MODE:
+    raw = read_median(times);
+    break;
+  case HX711_AVERAGE_MODE:
+  default:
+    raw = read_average(times);
+    break;
+  }
+  return raw - _offset;
+};
+
+float HX711::get_units(uint8_t times) {
+  float units = get_value(times) * _scale;
+  return units;
+};
+
+///////////////////////////////////////////////////////
+//
+//  TARE
+//
+void HX711::tare(uint8_t times) { _offset = read_average(times); }
+
+float HX711::get_tare() { return -_offset * _scale; }
+
+bool HX711::tare_set() { return _offset != 0; }
+
+///////////////////////////////////////////////////////////////
+//
+//  GAIN
+//
+//  note: if parameter gain == 0xFF40 some compilers
+//  will map that to 0x40 == HX711_CHANNEL_A_GAIN_64;
+//  solution: use uint32_t or larger parameters everywhere.
+//  note that changing gain/channel may take up to 400 ms (page 3)
+bool HX711::set_gain(uint8_t gain, bool forced) {
+  if ((not forced) && (_gain == gain))
+    return true;
+  switch (gain) {
+  case HX711_CHANNEL_B_GAIN_32:
+  case HX711_CHANNEL_A_GAIN_64:
+  case HX711_CHANNEL_A_GAIN_128:
+    _gain = gain;
+    read(); //  next user read() is from right channel / gain
+    return true;
+  }
+  return false; //  unchanged, but incorrect value.
+}
+
+uint8_t HX711::get_gain() { return _gain; }
+
+///////////////////////////////////////////////////////////////
+//
+//  CALIBRATION
+//
+bool HX711::set_scale(float scale) {
+  if (scale == 0)
     return false;
-  }
+  _scale = 1.0 / scale;
+  return true;
+}
 
-  bool HX711::wait_ready_timeout(unsigned long timeout, unsigned long delay_ms) {
-    // Wait for the chip to become ready until timeout.
-    // https://github.com/bogde/HX711/pull/96
-    unsigned long millisStarted = millis();
-    while (millis() - millisStarted < timeout) {
-      if (is_ready()) {
-        return true;
-      }
-      delay(delay_ms);
+float HX711::get_scale() { return 1.0 / _scale; }
+
+void HX711::set_offset(long offset) { _offset = offset; }
+
+long HX711::get_offset() { return _offset; }
+
+//  assumes tare() has been set.
+void HX711::calibrate_scale(uint16_t weight, uint8_t times) {
+  _scale = (1.0 * weight) / (read_average(times) - _offset);
+}
+
+///////////////////////////////////////////////////////////////
+//
+//  POWER MANAGEMENT
+//
+void HX711::power_down() {
+  //  at least 60 us HIGH
+  digitalWrite(_clockPin, HIGH);
+  delayMicroseconds(64);
+}
+
+void HX711::power_up() { digitalWrite(_clockPin, LOW); }
+
+///////////////////////////////////////////////////////////////
+//
+//  MISC
+//
+uint32_t HX711::last_read() { return _lastRead; }
+
+///////////////////////////////////////////////////////////////
+//
+//  PRIVATE
+//
+
+void HX711::_insertSort(float *array, uint8_t size) {
+  uint8_t t, z;
+  float temp;
+  for (t = 1; t < size; t++) {
+    z = t;
+    temp = array[z];
+    while ((z > 0) && (temp < array[z - 1])) {
+      array[z] = array[z - 1];
+      z--;
     }
-    return false;
+    array[z] = temp;
+    yield();
   }
+}
 
-  long HX711::read_average(byte times) {
-    long sum = 0;
-    for (byte i = 0; i < times; i++) {
-      sum += read();
-      // Probably will do no harm on AVR but will feed the Watchdog Timer
-      // (WDT) on ESP. https://github.com/bogde/HX711/issues/73
-      delay(0);
+//  MSB_FIRST optimized shiftIn
+//  see datasheet page 5 for timing
+uint8_t HX711::_shiftIn() {
+  //  local variables are faster.
+  uint8_t clk = _clockPin;
+  uint8_t data = _dataPin;
+  uint8_t value = 0;
+  uint8_t mask = 0x80;
+  while (mask > 0) {
+    digitalWrite(clk, HIGH);
+    if (_fastProcessor) //  T2  >= 0.2 us
+      delayMicroseconds(1);
+    if (digitalRead(data) == HIGH) {
+      value |= mask;
     }
-    return sum / times;
+    digitalWrite(clk, LOW);
+    if (_fastProcessor)
+      delayMicroseconds(1); //  keep duty cycle ~50%
+    mask >>= 1;
   }
+  return value;
+}
 
-  double HX711::get_value(byte times) { return read_average(times) - OFFSET; }
-
-  float HX711::get_units(byte times) { return get_value(times) / SCALE; }
-
-  void HX711::tare(byte times) {
-    double sum = read_average(times);
-    set_offset(sum);
-  }
-
-  void HX711::set_scale(float scale) { SCALE = scale; }
-
-  float HX711::get_scale() { return SCALE; }
-
-  void HX711::set_offset(long offset) { OFFSET = offset; }
-
-  long HX711::get_offset() { return OFFSET; }
-
-  void HX711::power_down() {
-    digitalWrite(PD_SCK, LOW);
-    digitalWrite(PD_SCK, HIGH);
-  }
-
-  void HX711::power_up() { digitalWrite(PD_SCK, LOW); }
+//  -- END OF FILE --

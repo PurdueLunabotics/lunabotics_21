@@ -3,11 +3,11 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
-#include "robot.hpp"
 #include "interfaces.hpp"
+#include "robot.hpp"
 
 #define TX_PERIOD 10               // ms
-#define CTRL_PERIOD 2                // ms
+#define CTRL_PERIOD 2              // ms
 #define UWB_TRANSFER_PERIOD 10'000 // microsec
 #define CURR_UPDATE_PERIOD 8       // ms
 #define STALE_EFFORT_PERIOD 1000   // ms
@@ -36,6 +36,8 @@ void send() {
 
   uwb::update(state.uwb_dist_0, state.uwb_dist_1, state.uwb_dist_2);
 
+  load_cell::update(state.load_cell_weight);
+
   /*
   Serial.print("Raw: ");
   Serial.print(state.act_right_curr);
@@ -50,17 +52,18 @@ IntervalTimer uwb_timer;
 float last_effort;
 
 void setup() {
-  //Serial.begin(115200);
+  // Serial.begin(115200);
   Sabertooth_MotorCtrl::init_serial(ST_SERIAL, ST_BAUD_RATE);
-  
+
   M5Stack_UWB_Trncvr::init();
   KillSwitchRelay::init();
+  HX711_Bus::init();
 
-  #ifdef OLD_CURRENT_SENSOR
+#ifdef OLD_CURRENT_SENSOR
   ACS711_Current_Bus::init_ads1115();
-  #else 
+#else
   ADS1119_Current_Bus::init_ads1119();
-  #endif
+#endif
 
   uwb_timer.begin(M5Stack_UWB_Trncvr::transfer, UWB_TRANSFER_PERIOD);
 
@@ -81,7 +84,7 @@ elapsedMillis ms_until_ctrl;
 elapsedMillis ms_curr_update;
 
 void loop() {
-  
+
   int n;
   n = RawHID.recv(buffer, 0); // 0 timeout = do not wait
   if (n > 0) {
@@ -92,7 +95,7 @@ void loop() {
     pb_decode(&stream, RobotEffort_fields, &effort);
     last_effort = millis();
   }
-  
+
   if (millis() - last_effort > STALE_EFFORT_PERIOD) {
     effort = RobotEffort_init_zero;
   }
@@ -100,7 +103,7 @@ void loop() {
   if (ms_until_ctrl > CTRL_PERIOD) {
     ms_until_ctrl -= CTRL_PERIOD;
     // TODO, add timer if robot effort not changing for too long, exit?
-    //KillSwitchRelay::logic(effort);
+    // KillSwitchRelay::logic(effort);
     ctrl();
   }
 
@@ -110,10 +113,10 @@ void loop() {
     n = RawHID.send(buffer, 0);
   }
 
-  #ifdef OLD_CURRENT_SENSOR
+#ifdef OLD_CURRENT_SENSOR
   if (ms_curr_update > CURR_UPDATE_PERIOD) {
     ms_curr_update -= CURR_UPDATE_PERIOD;
     ACS711_Current_Bus::transfer();
   }
-  #endif
+#endif
 }

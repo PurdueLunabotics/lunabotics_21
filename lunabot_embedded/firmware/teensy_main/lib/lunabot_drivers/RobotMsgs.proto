@@ -16,6 +16,8 @@ message RobotSensors {
   float uwb_dist_0 = 11;
   float uwb_dist_1 = 12;
   float uwb_dist_2 = 13;
+  
+  float load_cell_weight = 14;
 }
 
 message RobotEffort {

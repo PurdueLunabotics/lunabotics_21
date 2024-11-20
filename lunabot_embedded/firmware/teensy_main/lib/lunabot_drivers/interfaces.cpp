@@ -18,7 +18,7 @@ int Sabertooth_MotorCtrl::initialized_serial_ = 0;
 
 Sabertooth_MotorCtrl::Sabertooth_MotorCtrl(Sabertooth *s, STMotor m) : st_{s}, motor_{m} {}
 
-void Sabertooth_MotorCtrl::init_serial(HardwareSerial s, int baud_rate) {
+void Sabertooth_MotorCtrl::init_serial(HardwareSerial &s, int baud_rate) {
   s.begin(baud_rate);
   initialized_serial_ = 1;
 }
@@ -101,8 +101,8 @@ ADS1119 ADS1119_Current_Bus::ads1 = ADS1119(ads1_addr);
 ADS1119 ADS1119_Current_Bus::ads2 = ADS1119(ads2_addr);
 
 void ADS1119_Current_Bus::init_ads1119() {
-  //init all channels to same general config, but with different mux config. 
-  //different configs for both chips for futureproofing, not because they're any different
+  // init all channels to same general config, but with different mux config.
+  // different configs for both chips for futureproofing, not because they're any different
   for (int i = 0; i < BUSES; ++i) {
     configurations[i][0].mux = ADS1119MuxConfiguration::positiveAIN0negativeAGND;
     configurations[i][1].mux = ADS1119MuxConfiguration::positiveAIN1negativeAGND;
@@ -113,27 +113,28 @@ void ADS1119_Current_Bus::init_ads1119() {
       configurations[i][j].gain = ADS1119Configuration::Gain::one;
       configurations[i][j].dataRate = ADS1119Configuration::DataRate::sps330;
       configurations[i][j].conversionMode = ADS1119Configuration::ConversionMode::continuous;
-      configurations[i][j].voltageReference = ADS1119Configuration::VoltageReferenceSource::external;
+      configurations[i][j].voltageReference =
+          ADS1119Configuration::VoltageReferenceSource::external;
       configurations[i][j].externalReferenceVoltage = 3.3;
     }
   }
 
   ads1.begin();
   ads1.reset();
-  
+
   ads2.begin();
   ads2.reset();
 }
 
 float ADS1119_Current_Bus::read(uint8_t bus, uint8_t mux) {
   switch (bus) {
-    case 0:
+  case 0:
     return ADS1119_Current_Bus::adc_to_current_31A(ads1.readVoltage(configurations[0][mux]));
-    case 1: 
-      return ADS1119_Current_Bus::adc_to_current_31A(ads2.readVoltage(configurations[1][mux]));
-    default:
-      //we only have two muxes
-      return 69.420;
+  case 1:
+    return ADS1119_Current_Bus::adc_to_current_31A(ads2.readVoltage(configurations[1][mux]));
+  default:
+    // we only have two muxes
+    return 69.420;
   }
 }
 
@@ -142,7 +143,7 @@ float ADS1119_Current_Bus::adc_to_current_31A(float adc_value, float adc_fsr, fl
   return 73.3 * (vout / vcc) - 37.52;
 }
 
-#endif// OLD_CURRENT_SENSOR
+#endif // OLD_CURRENT_SENSOR
 
 // VLH35_Angles
 
@@ -220,14 +221,44 @@ float VLH35_Angle_Bus::read_enc(uint8_t id) {
   return static_cast<float>(data) / static_cast<float>(1 << 16) * 360.0F;
 }
 
-Encoder AMT13_Angle_Bus::encs[NUM_ENCODERS] = {
-      Encoder(PIN_LIST[0], PIN_LIST[1]),
-      Encoder(PIN_LIST[2], PIN_LIST[3]),
-      Encoder(PIN_LIST[4], PIN_LIST[5])
-};
+Encoder AMT13_Angle_Bus::encs[NUM_ENCODERS] = {Encoder(PIN_LIST[0], PIN_LIST[1]),
+                                               Encoder(PIN_LIST[2], PIN_LIST[3]),
+                                               Encoder(PIN_LIST[4], PIN_LIST[5])};
 
 float AMT13_Angle_Bus::read_enc(uint8_t id) {
-  return encs[id].read()/pulses_per_rev * deg_per_rev;
+  return encs[id].read() / pulses_per_rev * deg_per_rev;
+}
+
+HX711 HX711_Bus::encs[NUM_SENSORS] = {
+    HX711(),
+    HX711(),
+};
+
+void HX711_Bus::init() {
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    encs[i].set_raw_mode();
+    encs[i].begin(PIN_LIST[i * 2], PIN_LIST[i * 2 + 1]);
+    // if (encs[i].is_ready()) {
+    //   encs[i].tare();
+    // }
+    encs[i].set_offset(ZERO_POINT[i]);
+    encs[i].set_gain(HX711_CHANNEL_A_GAIN_128);
+    encs[i].set_scale(SCALE_CALIBRATION[i]);
+  }
+}
+
+float HX711_Bus::read_scale(uint8_t id) {
+  if (encs[id].is_ready()) {
+    // since we could start with weight on the load cell, manually subtract zero point instead of
+    // taring
+    float val = encs[id].read();
+    // if load cell is not returning any data, but HX711 is connected
+    if (val == 0)
+      return -1;
+    return val;
+  } else {
+    return -1;
+  }
 }
 
 volatile float M5Stack_UWB_Trncvr::recv_buffer_[NUM_UWB_TAGS] = {0};
@@ -293,45 +324,44 @@ void M5Stack_UWB_Trncvr::transfer() {
 long KillSwitchRelay::kill_time;
 bool KillSwitchRelay::dead;
 
-void KillSwitchRelay::init() { 
-  pinMode(kill_pin, OUTPUT); 
+void KillSwitchRelay::init() {
+  pinMode(kill_pin, OUTPUT);
   KillSwitchRelay::dead = false;
   reset();
   KillSwitchRelay::kill_time = millis();
 }
 
-void KillSwitchRelay::reset() { 
-  digitalWrite(kill_pin, HIGH); 
+void KillSwitchRelay::reset() {
+  digitalWrite(kill_pin, HIGH);
   KillSwitchRelay::dead = false;
 }
 
-void KillSwitchRelay::kill() { 
+void KillSwitchRelay::kill() {
   digitalWrite(kill_pin, LOW);
   KillSwitchRelay::kill_time = millis();
   KillSwitchRelay::dead = true;
 }
 
-
 void KillSwitchRelay::disable_motor(int id, RobotEffort &effort) {
   switch (id) {
-    case 0:
-      effort.excavate = 0;
-      break;
-    case 1:
-      effort.deposit = 0;
-      break;
-    case 2:
-      effort.left_drive = 0;
-      break;
-    case 3:
-      effort.right_drive = 0;
-      break;
-    default:
-      return;
+  case 0:
+    effort.excavate = 0;
+    break;
+  case 1:
+    effort.deposit = 0;
+    break;
+  case 2:
+    effort.left_drive = 0;
+    break;
+  case 3:
+    effort.right_drive = 0;
+    break;
+  default:
+    return;
   }
 }
 
-//exc, dep, drive_L, drive_R
+// exc, dep, drive_L, drive_R
 volatile int KillSwitchRelay::cutoff_buffer[4] = {0};
 volatile int KillSwitchRelay::disable_counter[4] = {0};
 volatile bool KillSwitchRelay::is_disable[4] = {false};
@@ -368,7 +398,7 @@ void KillSwitchRelay::logic(RobotEffort &effort) {
 
   for (int i = 0; i < 4; ++i) {
     cutoff_buffer[i] -= cutoff_decay;
-    if (cutoff_buffer < 0) {
+    if (cutoff_buffer[i] < 0) {
       cutoff_buffer[i] = 0;
     }
     if (is_disable[i]) {
@@ -387,7 +417,7 @@ void KillSwitchRelay::logic(RobotEffort &effort) {
 
     if (disable_counter[i] >= kill_thresh) {
       disable_counter[i] = 0;
-      //TODO, send "all fucked" signal back to teensy
+      // TODO, send "all fucked" signal back to teensy
       kill();
     }
   }

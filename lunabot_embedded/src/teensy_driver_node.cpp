@@ -61,7 +61,6 @@ void recv(ros::Publisher &pub) {
   state_msg.drive_left_curr = state.drive_left_curr;
   state_msg.dep_curr = state.dep_curr;
   state_msg.exc_curr = state.exc_curr;
-  
 
   // TODO: add timestamp to each value using StampedValue, allowing for more accurate derivative
   // calculations:
@@ -100,6 +99,7 @@ void recv(ros::Publisher &pub) {
   state_msg.uwb_dists.push_back(state.uwb_dist_0);
   state_msg.uwb_dists.push_back(state.uwb_dist_1);
   state_msg.uwb_dists.push_back(state.uwb_dist_2);
+  state_msg.load_cell_weight = state.load_cell_weight;
 
   pub.publish(state_msg);
 }
@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
       if (num_read_fails >= 5) {
         printf("Sorry, too many read errors. Giving up.\n");
         printf("sleeping\n!");
-        //ros::Duration(1).sleep();
+        // ros::Duration(1).sleep();
         r = rawhid_open(1, 0x16C0, 0x0486, 0xFFAB, 0x0200);
         printf("Reopened rawhid, r is %d\n", r);
         num_read_fails = 0;

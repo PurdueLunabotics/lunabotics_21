@@ -46,6 +46,7 @@ teensy_upload
 
 ```
 pip3 install nanopb
+pip3 install grpcio-tools
 cd lunabot_embedded/firmware/teensy_main/lib/lunabot_drivers
 python3 -m nanopb.generator.nanopb_generator -L quote RobotMsgs.proto
 ```
