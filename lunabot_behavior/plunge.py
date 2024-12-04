@@ -1,7 +1,7 @@
 import rospy
 
 from lunabot_msgs.msg import RobotEffort, RobotSensors
-from std_msgs.msg import Int8
+from std_msgs.msg import Int8, Int32
 import interrupts
 
 import time
@@ -22,7 +22,7 @@ class Plunge:
         """
 
         if excavation_publisher is None:
-            self.excavation_publisher = rospy.Publisher("/excavate", Int8, queue_size=1, latch=True)
+            self.excavation_publisher = rospy.Publisher("/excavate", Int32, queue_size=1, latch=True)
             rospy.init_node('plunge_node')
         else:
             self.excavation_publisher = excavation_publisher
@@ -44,14 +44,14 @@ class Plunge:
         # TODO: check and test this value
         self.LOWERING_TIME = 23 #In seconds, how long it takes to lower the linear actuators 90% of the way
 
-        self.EXCAVATION_SPEED = 127
+        self.EXCAVATION_SPEED = 1000 #RPM
         self.LIN_ACT_SPEED = -110
 
         self.is_sim = rospy.get_param("is_sim")
 
     def check_exc_stuck(self, exc_msg):
         # check if trying to go somewhere
-        if exc_msg >= 15:
+        if exc_msg >= 300:
             # check if not going anywhere
             if self.robot_sensors.exc_vel <= 0.1:
                 self.exc_stuck = True
@@ -68,7 +68,7 @@ class Plunge:
 
         time.sleep(0.1)
 
-        excavation_message = Int8()
+        excavation_message = Int32()
         excavation_message.data = self.EXCAVATION_SPEED
 
         lin_act_message = Int8()

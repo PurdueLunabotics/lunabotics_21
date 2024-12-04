@@ -10,7 +10,7 @@ from geometry_msgs.msg import Twist, PoseStamped
 from nav_msgs.msg import Path, Odometry
 from apriltag_ros.msg import AprilTagDetectionArray, AprilTagDetection
 from lunabot_msgs.msg import RobotEffort, RobotSensors, RobotErrors, Behavior
-from std_msgs.msg import Bool, Int8
+from std_msgs.msg import Bool, Int8, Int32
 
 import ascent
 import find_apriltag
@@ -58,10 +58,10 @@ class Behavior:
         self.robot_odom: Odometry = Odometry()
 
         self.lin_act_publisher = rospy.Publisher("/lin_act", Int8, queue_size=1, latch=True)
-        self.left_drive_publisher = rospy.Publisher("/left_drive", Int8, queue_size=1, latch=True)
-        self.right_drive_publisher = rospy.Publisher("/right_drive", Int8, queue_size=1, latch=True)
-        self.excavate_publisher = rospy.Publisher("/excavate", Int8, queue_size=1, latch=True)
-        self.deposition_publisher = rospy.Publisher("/deposition", Int8, queue_size=1, latch=True)
+        self.left_drive_publisher = rospy.Publisher("/left_drive", Int32, queue_size=1, latch=True)
+        self.right_drive_publisher = rospy.Publisher("/right_drive", Int32, queue_size=1, latch=True)
+        self.excavate_publisher = rospy.Publisher("/excavate", Int32, queue_size=1, latch=True)
+        self.deposition_publisher = rospy.Publisher("/deposition", Int32, queue_size=1, latch=True)
 
         self.velocity_publisher = rospy.Publisher("/cmd_vel", Twist, queue_size=1, latch=True)
         self.traversal_publisher = rospy.Publisher("/behavior/traversal_enabled", Bool, queue_size=1, latch=True)

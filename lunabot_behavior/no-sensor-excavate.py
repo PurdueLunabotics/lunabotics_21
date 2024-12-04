@@ -10,7 +10,7 @@ from pid_controller import VelocityPIDController
 from clamp_output import clamp_output  
 import ascent
 
-from std_msgs.msg import Int8
+from std_msgs.msg import Int8, Int32
 
 
 class Excavate:
@@ -34,7 +34,7 @@ class Excavate:
         """
 
         if excavation_publisher is None:
-            self.excavation_publisher: rospy.Publisher = rospy.Publisher("/excavate", Int8, queue_size=1, latch=True)
+            self.excavation_publisher: rospy.Publisher = rospy.Publisher("/excavate", Int32, queue_size=1, latch=True)
             rospy.init_node("excavation_node")
         else:
             self.excavation_publisher: rospy.Publisher = excavation_publisher
@@ -97,7 +97,7 @@ class Excavate:
             time.sleep(3)
             return True
 
-        excavation_message = Int8()
+        excavation_message = Int32()
         lin_act_message = Int8()
 
         start_time = rospy.get_time()
@@ -113,7 +113,7 @@ class Excavate:
 
             dt = new_time - current_time
 
-            excavation_message.data = int(127 * 0.8)
+            excavation_message.data = int(1000 * 0.8)
 
             lin_act_message.data = -110
 
@@ -143,7 +143,7 @@ class Excavate:
             time.sleep(3)
             return True
 
-        excavation_message = Int8()
+        excavation_message = Int32()
         cmd_vel_message = Twist()
 
         current_time = rospy.get_time()
@@ -169,7 +169,7 @@ class Excavate:
 
             dt = new_time - current_time
 
-            excavation_message.data = int(127 * 0.8)
+            excavation_message.data = int(1000 * 0.8)
 
             self.excavation_publisher.publish(excavation_message)
 
@@ -200,9 +200,9 @@ class Excavate:
         print("Excavation: spinning backwards (", self.exc_failure_counter, ")")
 
         # 90% of max speed, backwards
-        EXCAVATION_SPEED = int(-127 * 0.9)
+        EXCAVATION_SPEED = int(-1000 * 0.9) #RPM
 
-        excavation_message = Int8()
+        excavation_message = Int32()
         excavation_message.data = EXCAVATION_SPEED
 
         self.excavation_publisher.publish(excavation_message)

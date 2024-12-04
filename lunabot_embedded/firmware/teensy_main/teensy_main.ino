@@ -7,7 +7,7 @@
 #include "interfaces.hpp"
 
 #define TX_PERIOD 10               // ms
-#define CTRL_PERIOD 2                // ms
+#define CTRL_PERIOD 2              // ms
 #define UWB_TRANSFER_PERIOD 10'000 // microsec
 #define CURR_UPDATE_PERIOD 8       // ms
 #define STALE_EFFORT_PERIOD 1000   // ms
@@ -50,29 +50,25 @@ IntervalTimer uwb_timer;
 float last_effort;
 
 void setup() {
-  //Serial.begin(115200);
+  // Serial.begin(115200);
   Sabertooth_MotorCtrl::init_serial(ST_SERIAL, ST_BAUD_RATE);
-  
+
   M5Stack_UWB_Trncvr::init();
   KillSwitchRelay::init();
 
-  #ifdef OLD_CURRENT_SENSOR
-  ACS711_Current_Bus::init_ads1115();
-  #else 
   ADS1119_Current_Bus::init_ads1119();
-  #endif
 
   uwb_timer.begin(M5Stack_UWB_Trncvr::transfer, UWB_TRANSFER_PERIOD);
 
+  drivetrain::begin();
+  excavation::begin();
+  deposition::begin();
+
   // disable timeout
   MC1.setTimeout(0);
-  MC2.setTimeout(0);
-  MC3.setTimeout(0);
-
   // set to fast ramp (1-10 - fast, 11-20 slow, 20-80 intermed)
   MC1.setRamping(1);
-  MC2.setRamping(1);
-  MC3.setRamping(1);
+
   last_effort = millis();
 }
 
@@ -81,7 +77,7 @@ elapsedMillis ms_until_ctrl;
 elapsedMillis ms_curr_update;
 
 void loop() {
-  
+
   int n;
   n = RawHID.recv(buffer, 0); // 0 timeout = do not wait
   if (n > 0) {
@@ -92,7 +88,7 @@ void loop() {
     pb_decode(&stream, RobotEffort_fields, &effort);
     last_effort = millis();
   }
-  
+
   if (millis() - last_effort > STALE_EFFORT_PERIOD) {
     effort = RobotEffort_init_zero;
   }
@@ -100,7 +96,7 @@ void loop() {
   if (ms_until_ctrl > CTRL_PERIOD) {
     ms_until_ctrl -= CTRL_PERIOD;
     // TODO, add timer if robot effort not changing for too long, exit?
-    //KillSwitchRelay::logic(effort);
+    // KillSwitchRelay::logic(effort);
     ctrl();
   }
 
@@ -109,11 +105,4 @@ void loop() {
     send();
     n = RawHID.send(buffer, 0);
   }
-
-  #ifdef OLD_CURRENT_SENSOR
-  if (ms_curr_update > CURR_UPDATE_PERIOD) {
-    ms_curr_update -= CURR_UPDATE_PERIOD;
-    ACS711_Current_Bus::transfer();
-  }
-  #endif
 }

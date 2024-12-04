@@ -27,7 +27,7 @@ class LeakyBucket:
 
 
 class ExcavationController:
-    FORWARD_EXCAVATE = -1
+    FORWARD_EXCAVATE = -5000
     DOWN_LEAD_SCREW = -0.2
     UP_LEAD_SCREW = 0.7
 
@@ -39,7 +39,7 @@ class ExcavationController:
         self.lead_screw_curr = None
         self.retract = False
 
-        self.exc_voltage = self.FORWARD_EXCAVATE
+        self.exc_rpm = self.FORWARD_EXCAVATE
         self.lead_screw_voltage = self.DOWN_LEAD_SCREW
 
         self.exc_leaky_bucket = LeakyBucket(self.is_exc_stuck, dec=20)
@@ -73,7 +73,7 @@ class ExcavationController:
                     else:
                         self.lead_screw_voltage = self.DOWN_LEAD_SCREW
                 else:
-                    self.exc_voltage = 0
+                    self.exc_rpm = 0
 
                 if lead_screw_overflow:
                     if self.lead_screw_max_extend():
@@ -115,14 +115,19 @@ class ExcavationController:
         effort_msg.lead_screw = self.constrain(
             self.lead_screw_voltage, max_percent=self.max_lead_screw_percent
         )
-        effort_msg.excavate = self.constrain(
-            self.exc_voltage, max_percent=self.max_exc_percent
+        effort_msg.excavate = self.constrain_RPM(
+            self.exc_rpm, max_percent=self.max_exc_percent
         )
         self._effort_pub.publish(effort_msg)
 
     def constrain(self, val, max_percent):
         val = np.clip(-1, val, 1)  # Clipping speed to not go over 100%
-        return np.int8(val * 127 * max_percent)
+        return np.int32(val * 127 * max_percent)
+    
+    def constrain_RPM(self, val, max_percent):
+        val = np.clip(-1, val, 1)  # Clipping speed to not go over 100%
+        return np.int32(val * 5000 * max_percent) #TODO RJN - check this threshold
+
 
     def stop(self):
         effort_msg = RobotEffort()

@@ -1,10 +1,10 @@
 Header header
 # Actuation
-int8 lin_act 
+int32 lin_act 
 # Drivetrain
-int8 left_drive
-int8 right_drive
+int32 left_drive
+int32 right_drive
 # Excavation
-int8 excavate
+int32 excavate
 # Deposition
-int8 deposit
+int32 deposit

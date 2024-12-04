@@ -4,15 +4,13 @@
 // https://docs.google.com/spreadsheets/d/1eX79YtawJqBA8VePFFtKJT6RR21gvK4qH1DKJX_vJE0/edit#gid=0
 
 // MCs
-Sabertooth MC1(128, ST_SERIAL); // DRIVE
-Sabertooth MC2(130, ST_SERIAL); // EXCAVATON
-Sabertooth MC3(131, ST_SERIAL); // DEPOSIT
+Sabertooth MC1(128, ST_SERIAL); // LINEAR ACTUATORS
 
 // ADCs
 namespace actuation {
 
-Sabertooth_MotorCtrl act_right_mtr{&MC3, STMotor::M2};
-Sabertooth_MotorCtrl act_left_mtr{&MC2, STMotor::M2};
+Sabertooth_MotorCtrl act_right_mtr{&MC1, STMotor::M1};
+Sabertooth_MotorCtrl act_left_mtr{&MC1, STMotor::M2};
 
 constexpr uint8_t ACT_RIGHT_CURR_ADC = 0;
 constexpr uint8_t ACT_RIGHT_CURR_MUX = 1; // U6 curr_sense_board
@@ -21,11 +19,7 @@ constexpr uint8_t ACT_LEFT_CURR_ADC = 1;
 constexpr uint8_t ACT_LEFT_CURR_MUX = 1; // U4 curr_sense_board
 
 void update(float &act_right_curr) {
-#ifdef OLD_CURRENT_SENSOR
-  act_right_curr = ACS711_Current_Bus::read(ACT_RIGHT_CURR_ADC, ACT_RIGHT_CURR_MUX);
-#else
   act_right_curr = ADS1119_Current_Bus::read(ACT_RIGHT_CURR_ADC, ACT_RIGHT_CURR_MUX);
-#endif
 }
 
 void cb(int8_t lin_act_volt) {
@@ -36,53 +30,33 @@ void cb(int8_t lin_act_volt) {
 } // namespace actuation
 
 namespace drivetrain {
-Sabertooth_MotorCtrl left_drive_mtr{&MC1, STMotor::M2};
-Sabertooth_MotorCtrl right_drive_mtr{&MC1, STMotor::M1};
+StepperMotor left_drive_mtr(LEFT_DRIVE_MOTOR_ID);
+StepperMotor right_drive_mtr(RIGHT_DRIVE_MOTOR_ID);
 
-constexpr uint8_t LEFT_CURR_ADC = 0;
-constexpr uint8_t LEFT_CURR_MUX = 2; // U5 curr_sense_board
-
-constexpr uint8_t RIGHT_CURR_ADC = 0;
-constexpr uint8_t RIGHT_CURR_MUX = 3; // U2 curr_sense_board
-
-constexpr uint8_t RIGHT_ENC_ID = 0;
-constexpr uint8_t LEFT_ENC_ID = 1;
-
-void update(float &left_curr, float &right_curr, float &left_angle, float &right_angle) {
-  #ifdef OLD_CURRENT_SENSOR
-  left_curr = ACS711_Current_Bus::read(LEFT_CURR_ADC, LEFT_CURR_MUX);
-  right_curr = ACS711_Current_Bus::read(RIGHT_CURR_ADC, RIGHT_CURR_MUX);
-  #else 
-  left_curr = ADS1119_Current_Bus::read(LEFT_CURR_ADC, LEFT_CURR_MUX);
-  right_curr = ADS1119_Current_Bus::read(RIGHT_CURR_ADC, RIGHT_CURR_MUX);
-  #endif
-
-
-  
-  left_angle = AMT13_Angle_Bus::read_enc(LEFT_ENC_ID);
-  right_angle = -AMT13_Angle_Bus::read_enc(RIGHT_ENC_ID);
+void begin() {
+  left_drive_mtr.begin();
+  right_drive_mtr.begin();
 }
 
-float update_curr_left() { 
-#ifdef OLD_CURRENT_SENSOR
-  return ACS711_Current_Bus::read(LEFT_CURR_ADC, LEFT_CURR_MUX);
-#else
-  return ADS1119_Current_Bus::read(LEFT_CURR_ADC, LEFT_CURR_MUX);
-#endif
+void update(float &left_curr, float &right_curr, float &left_angle, float &right_angle) {
+  left_curr = left_drive_mtr.read_current();
+  right_curr = right_drive_mtr.read_current();
+  left_angle = left_drive_mtr.read_motor_position_radians();
+  right_angle = -right_drive_mtr.read_motor_position_radians();
+}
+
+float update_curr_left() {
+  return left_drive_mtr.read_current();
 }
 
 float update_curr_right() {
-#ifdef OLD_CURRENT_SENSOR
-  return ACS711_Current_Bus::read(RIGHT_CURR_ADC, RIGHT_CURR_MUX);
-#else
-  return ADS1119_Current_Bus::read(RIGHT_CURR_ADC, RIGHT_CURR_MUX);
-#endif
+  return right_drive_mtr.read_current();
 }
 
-void cb(int8_t left_drive_volt, int8_t right_drive_volt) {
+void cb(int32_t left_drive_rpm, int32_t right_drive_rpm) { // TODO RJN - ensure this entire message chain is int32 RPM
   // Tank drive steering
-  left_drive_mtr.write(left_drive_volt);
-  right_drive_mtr.write(right_drive_volt);
+  left_drive_mtr.move_at_speed(left_drive_rpm);
+  right_drive_mtr.move_at_speed(right_drive_rpm);
 }
 
 } // namespace drivetrain
@@ -96,59 +70,43 @@ void update(float &d0, float &d1, float &d2) {
 } // namespace uwb
 
 namespace excavation {
-Sabertooth_MotorCtrl exc_mtr{&MC2, STMotor::M1};
+StepperMotor exc_mtr(EXC_MOTOR_ID);
 
-constexpr uint8_t EXC_CURR_ADC = 0;
-constexpr uint8_t EXC_CURR_MUX = 0; // U1 curr_sense_board
+void begin() {
+  exc_mtr.begin();
+}
 
-constexpr uint8_t EXC_ENC_ID = 2;
-
-void update(float &exc_curr, float &exc_angle) { 
-  #ifdef OLD_CURRENT_SENSOR
-  exc_curr = ACS711_Current_Bus::read(EXC_CURR_ADC, EXC_CURR_MUX); 
-  #else
-  exc_curr = ADS1119_Current_Bus::read(EXC_CURR_ADC, EXC_CURR_MUX); 
-  #endif
-
-  exc_angle = -AMT13_Angle_Bus::read_enc(EXC_ENC_ID);
+void update(float &exc_curr, float &exc_angle) {
+  exc_curr = exc_mtr.read_current();
+  exc_angle = -exc_mtr.read_motor_position_radians();
 }
 
 float update_curr() {
-#ifdef OLD_CURRENT_SENSOR
-  return ACS711_Current_Bus::read(EXC_CURR_ADC, EXC_CURR_MUX);
-#else
-  return ADS1119_Current_Bus::read(EXC_CURR_ADC, EXC_CURR_MUX);
-#endif
+  return exc_mtr.read_current();
 }
 
-
-void cb(int8_t speed) { exc_mtr.write(speed); }
+void cb(int32_t speed_rpm) {
+  exc_mtr.move_at_speed(speed_rpm);
+}
 } // namespace excavation
 
 namespace deposition {
-Sabertooth_MotorCtrl dep_mtr{&MC3, STMotor::M1};
-//Sabertooth_MotorCtrl exc_mtr{&MC3, STMotor::M1};
+StepperMotor dep_mtr(DEP_MOTOR_ID);
 
-constexpr uint8_t DEP_CURR_ADC = 1;
-constexpr uint8_t DEP_CURR_MUX = 0; // U3 curr_sense_board
+void begin() {
+  dep_mtr.begin();
+}
 
 void update(float &dep_curr) {
-#ifdef OLD_CURRENT_SENSOR
-  dep_curr = ACS711_Current_Bus::read(DEP_CURR_ADC, DEP_CURR_MUX);
-#else
-  dep_curr = ADS1119_Current_Bus::read(DEP_CURR_ADC, DEP_CURR_MUX);
-#endif
+  dep_curr = dep_mtr.read_current();
 }
 
 float update_curr() {
-  #ifdef OLD_CURRENT_SENSOR
-  return ACS711_Current_Bus::read(DEP_CURR_ADC, DEP_CURR_MUX); 
-  #else
-  return ADS1119_Current_Bus::read(DEP_CURR_ADC, DEP_CURR_MUX); 
-  #endif
+  return dep_mtr.read_current();
 }
 
-void cb(int8_t volt) { dep_mtr.write(-volt); }
-//exc_mtr.write(volt); }
+void cb(int32_t speed_rpm) {
+  dep_mtr.move_at_speed(-speed_rpm);
+}
 
 } // namespace deposition

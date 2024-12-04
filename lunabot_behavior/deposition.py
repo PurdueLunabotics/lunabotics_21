@@ -3,7 +3,7 @@
 import rospy
 
 from lunabot_msgs.msg import RobotSensors
-from std_msgs.msg import Int8
+from std_msgs.msg import Int32
 from geometry_msgs.msg import Twist
 
 from homing_controller import HomingController
@@ -27,7 +27,7 @@ class Deposition:
         """
 
         if deposition_publisher is None:
-            self.deposition_publisher = rospy.Publisher("/deposition", Int8, queue_size=1, latch=True)
+            self.deposition_publisher = rospy.Publisher("/deposition", Int32, queue_size=1, latch=True)
             rospy.init_node('deposition_node')
         else:
             self.deposition_publisher = deposition_publisher
@@ -38,7 +38,7 @@ class Deposition:
 
         self.rate = rospy.Rate(10)  # 10hz
 
-        self.deposition_power = 127 # TODO change if needed
+        self.deposition_RPM = 1000
 
         # self.load_cell_threshold = 1 # in kilograms, TODO test / verify WHEN LOAD CELLS EXIST
 
@@ -58,8 +58,8 @@ class Deposition:
 
         time.sleep(0.1)
 
-        deposition_msg = Int8()
-        deposition_msg.data = self.deposition_power
+        deposition_msg = Int32()
+        deposition_msg.data = self.deposition_RPM
 
         start_time = rospy.get_time()
 

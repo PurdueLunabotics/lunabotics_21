@@ -3,7 +3,7 @@
 ## RobotSensors.msg
 
 | Message Name      | Data Type | Units     | Range       | Notes                         |
-|-------------------|-----------|-----------|-------------|-------------------------------|
+| ----------------- | --------- | --------- | ----------- | ----------------------------- |
 | act_right_curr    | float32   | Amps      |             |                               |
 | dep_curr          | float32   | Amps      | -40 to 40   | Nominal 10A, Set stall 25A    |
 | exc_curr          | float32   | Amps      | -40 to 40   | Nominal 10A, Set stall 25A    |
@@ -19,10 +19,10 @@
 
 ## RobotEffort.msg
 
-| Message Name | Data Type | Units | Range       | Notes                               |
-|--------------|-----------|-------|-------------|-------------------------------------|
-| lin_act      | int8      | Amps  | -127 to 127 | Will contain CW and CCW for context |
-| left_drive   | int8      | Amps  | -127 to 127 | Will contain CW and CCW for context |
-| right_drive  | int8      | Amps  | -127 to 127 | Will contain CW and CCW for context |
-| excavate     | int8      | Amps  | -127 to 127 |                                     |
-| deposit      | int8      | Amps  | -127 to 127 |                                     |
+| Message Name | Data Type | Units | Range         | Notes                               |
+| ------------ | --------- | ----- | ------------- | ----------------------------------- |
+| lin_act      | int8      | Amps  | -127 to 127   | Will contain CW and CCW for context |
+| left_drive   | int32     | RPM   | -3000 to 3000 |                                     |
+| right_drive  | int32     | RPM   | -3000 to 3000 |                                     |
+| excavate     | int32     | RPM   | -3000 to 3000 |                                     |
+| deposit      | int32     | RPM   | -3000 to 3000 |                                     |

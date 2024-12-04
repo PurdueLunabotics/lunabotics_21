@@ -52,7 +52,7 @@ class Stuck:
             error_publisher.publish(stuck_msg)
 
             # check if trying to go somewhere
-            if self.robot_effort.left_drive >= 15 or self.robot_effort.right_drive >= 15:
+            if self.robot_effort.left_drive >= 15 or self.robot_effort.right_drive >= 300:
                 # check if not going anywhere
                 if self.robot_sensors.drive_left_vel <= 0.1 and self.robot_sensors.drive_right_vel <= 0.1:
                     if not currently_stuck:
