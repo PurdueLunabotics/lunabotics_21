@@ -24,4 +24,5 @@ message RobotEffort {
   sint32 right_drive = 3;
   sint32 excavate = 4;
   sint32 deposit = 5;
+  sint32 led_color = 6;
 }
