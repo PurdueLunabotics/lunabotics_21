@@ -6,3 +6,5 @@ uint8 MAGENTA=5 # R B
 uint8 AQUA=6 # G B
 unit8 WHITE=7 # R G B
 unit8 BLACK=8 # -
+
+unit8 color

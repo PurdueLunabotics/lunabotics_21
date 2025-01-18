@@ -112,6 +112,8 @@ void effort_cb(const lunabot_msgs::RobotEffort &msg) {
   effort.deposit = msg.deposit;
 }
 
+void led_cb(const lunabot_msgs::Color) { effort.led_color = msg.color; }
+
 void publish(const ros::TimerEvent &) {
   memset(buf, 0, sizeof(buf));
   pb_ostream_t stream = pb_ostream_from_buffer(buf, sizeof(buf));
@@ -134,6 +136,7 @@ int main(int argc, char **argv) {
   ros::NodeHandle nh;
 
   ros::Subscriber effort_sub = nh.subscribe("/effort", 10, &effort_cb);
+  ros::Subscriber color_sub = nh.subscribe("/led_color", 10, &led_cb);
   ros::Publisher state_pub = nh.advertise<lunabot_msgs::RobotSensors>("/sensors", 10);
 
   ros::Rate rate(100);
