@@ -10,6 +10,7 @@
 #include <lunabot_embedded/sensor_proc.h>
 #include <lunabot_msgs/RobotEffort.h>
 #include <lunabot_msgs/RobotSensors.h>
+#include <lunabot_msgs/Color.h>
 
 extern "C" {
 #include "RobotMsgs.pb.h"
