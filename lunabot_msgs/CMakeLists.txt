@@ -32,6 +32,7 @@ add_message_files(FILES
   RobotSensors.msg
   RobotErrors.msg
   Behavior.msg
+  Color.msg
 )
 
 ## Generate added messages and services with any dependencies listed here
