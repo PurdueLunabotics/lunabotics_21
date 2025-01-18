@@ -112,7 +112,7 @@ void effort_cb(const lunabot_msgs::RobotEffort &msg) {
   effort.deposit = msg.deposit;
 }
 
-void led_cb(const lunabot_msgs::Color) { effort.led_color = msg.color; }
+void led_cb(const lunabot_msgs::Color &msg) { effort.led_color = msg.color; }
 
 void publish(const ros::TimerEvent &) {
   memset(buf, 0, sizeof(buf));
